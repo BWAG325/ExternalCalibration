@@ -1,0 +1,37 @@
+%YAML:1.0
+---
+cameras:
+  - id: 0
+    K: !!opencv-matrix
+      rows: 3
+      cols: 3
+      dt: d
+      data: [1000.0, 0.0, 320.0, 0.0, 1000.0, 240.0, 0.0, 0.0, 1.0]
+    D: !!opencv-matrix
+      rows: 1
+      cols: 5
+      dt: d
+      data: [ 0.1, -0.2, 0.001, 0.002, 0.0 ]
+  - id: 2
+    K: !!opencv-matrix
+      rows: 3
+      cols: 3
+      dt: d
+      data: [1000.0, 0.0, 320.0, 0.0, 1000.0, 240.0, 0.0, 0.0, 1.0]
+    D: !!opencv-matrix
+      rows: 1
+      cols: 5
+      dt: d
+      data: [ 0.1, -0.2, 0.001, 0.002, 0.0 ]
+
+boards:
+  - id: 0
+    X: 9
+    Y: 6
+    square_size: 0.025
+  - id: 1
+    X: 8
+    Y: 5
+    square_size: 0.02
+
+#板子id是第几个，相机id是相机端口id，两个不一样，注意区分
