@@ -22,7 +22,7 @@ class TransformTool {
 
 
     //对该图片上的棋盘格变化关系进行求解,储存到boardTF中,全部转化成n到0的变化矩阵
-    void boardTransform(const std::vector<std::pair<cv::Mat, cv::Mat>>& Tf,
+    void boardTransform(const std::vector<std::pair<cv::Mat, cv::Mat>>& TF,
                         std::vector<std::pair<cv::Mat, cv::Mat>>& boardTF);
 
     //对变化关系使用李群平均
@@ -42,11 +42,12 @@ public:
 
 
     //对传入的单张图片的棋盘进行处理，得到每个棋盘对该相机的 R T
-    bool getTF(const Corners& corners, const std::vector<Chessboard>& boards,
-                    const CameraParams& cameraParam, std::vector<std::pair<cv::Mat, cv::Mat>>& tf);
+    bool getTF(const Corners& corners, const std::vector<Chessboard>& boards, const std::vector<cv::Mat>& chessboards,
+               const CameraParams& cameraParam, std::vector<std::pair<cv::Mat, cv::Mat>>& tf);
     //只比上面那个多了一个函数
     bool getBoardTF(const Corners& corners, const std::vector<Chessboard>& boards,
-                    const CameraParams& cameraParam, std::vector<std::pair<cv::Mat, cv::Mat>>& tf);
+                    const std::vector<cv::Mat>& chessboards, const CameraParams& cameraParam,
+                    std::vector<std::pair<cv::Mat, cv::Mat>>& tf);
     //后面使用tfAverage进行处理，然后计算坐标变化关系；
 };
 
