@@ -13,7 +13,7 @@ CornerDetAC cornerDetector;
 ChessboardStruct chessboardStruct;
 std::string yamlPath = "../data/params.yaml";
 
-
+//读取参数
 void loadParams(std::vector<CameraParams>& cameraParams , std::vector<Chessboard>& boards ) {
     std::cout << "Loading ..." << std::endl;
     cv::FileStorage fs(yamlPath, cv::FileStorage::READ);
@@ -34,7 +34,7 @@ void loadParams(std::vector<CameraParams>& cameraParams , std::vector<Chessboard
         cameraParams.push_back(cam);
     }
 }
-
+//读取图片
 cv::Mat getImage(cv::Mat& src) {
     std::string img_path = "../img/5.png";
     std::cout << "reading img" << img_path << std::endl;
@@ -56,7 +56,7 @@ cv::Mat getImage(cv::Mat& src) {
 
     return gray;
 }
-
+//检测棋盘格
 void getData(cv::Mat& gray, Corners& corners, std::vector<cv::Mat>& chessboards) {
     //START
     auto timeCount = static_cast<double>(cv::getTickCount());
@@ -82,18 +82,6 @@ int main() {
     Corners corners;
 
     getData(gray, corners, chessboards);
-
-    //获得标定板在图像坐标系下的坐标
-
-    for (const auto& chessboard : chessboards) {
-        std::vector<cv::Point2f> imgPoint;
-        for (int i = 0; i < chessboard.rows; i++) {
-            for (int j = 0; j < chessboard.cols; j++) {
-                imgPoint.emplace_back(chessboard.at<int>(i, j));
-            }
-        }
-        imgPoints.emplace_back(imgPoint);
-    }
 
     // cv::Mat rvec, tvec;  // 旋转向量和平移向量
     // cv::solvePnP(objectPoints, imgPoints, K, D, rvec, tvec);
