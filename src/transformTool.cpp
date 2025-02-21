@@ -34,6 +34,78 @@ bool TransformTool::getBoardTF(const Corners& corners, const std::vector<Chessbo
     return true;
 }
 
+bool TransformTool::tfADD(std::pair<cv::Mat, cv::Mat>& transform, std::vector<std::pair<cv::Mat, cv::Mat>>& maskTF,
+                          int main, int rest) {
+    if (main >= maskTF.size()) {
+        std::cout << "main out of range" << std::endl;
+        return false;
+    }
+    if (maskTF[main].first.empty() || maskTF[main].second.empty()) {
+        std::cout << "maskTF main is empty" << std::endl;
+        return false;
+    }
+    if (main == 0) {
+        if (rest > maskTF.size()) {
+            maskTF.push_back(transform);
+        } else {
+            if (maskTF[rest].first.empty() || maskTF[rest].second.empty()) {
+                maskTF[rest] = transform;
+            } else {
+                std::cout << "rest is not empty" << std::endl;
+                return false;
+            }
+        }
+    } else {
+        cv::Mat mainR = maskTF[main].first;
+        cv::Mat mainT = maskTF[main].second;
+        cv::Mat restR = transform.first;
+        cv::Mat restT = transform.second;
+        cv::Mat R, T;
+        R = mainR.t() * restR;
+        T = mainT.t() * (restT - mainT);
+        if (rest > maskTF.size()) {
+            maskTF.emplace_back(R, T);
+        } else {
+            if (maskTF[rest].first.empty() || maskTF[rest].second.empty()) {
+                maskTF[rest] = std::make_pair(R, T);
+            } else {
+                std::cout << "rest is not empty" << std::endl;
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+
+//坐标关系都是相对板1保存，是网状的坐标关系,获得从rest到main的转化关系
+bool TransformTool::lookupTransform(const std::vector<std::pair<cv::Mat, cv::Mat>>& maskTF, int main, int rest,
+                                    std::pair<cv::Mat, cv::Mat>& transform) {
+    if (main >= maskTF.size() || rest >= maskTF.size()) {
+        std::cout << "main or rest out of range" << std::endl;
+        return false;
+    }
+    if (maskTF[main].first.empty() || maskTF[main].second.empty()) {
+        std::cout << "maskTF main is empty" << std::endl;
+        return false;
+    }
+    if (maskTF[rest].first.empty() || maskTF[rest].second.empty()) {
+        std::cout << "maskTF rest is empty" << std::endl;
+        return false;
+    }
+    cv::Mat mainR = maskTF[main].first;
+    cv::Mat mainT = maskTF[main].second;
+    cv::Mat restR = maskTF[rest].first;
+    cv::Mat restT = maskTF[rest].second;
+    cv::Mat R, T;
+    R = mainR.t() * restR;
+    T = mainT.t() * (restT - mainT);
+
+    transform = std::pair<cv::Mat, cv::Mat>(R, T);
+    return true;
+}
+
 
 //对单张图片棋盘上的点进行分类
 bool TransformTool::boardClassify(const Corners& corners, const std::vector<Chessboard>& boards,
@@ -89,7 +161,8 @@ bool TransformTool::pnpCalculate(const std::vector<Chessboard>& boards, const Ca
     return true;
 }
 
-void TransformTool::boardTransform(const std::vector<std::pair<cv::Mat, cv::Mat>>& TF, std::vector<std::pair<cv::Mat, cv::Mat>>& boardTF) {
+void TransformTool::boardTransform(const std::vector<std::pair<cv::Mat, cv::Mat>>& TF,
+                                   std::vector<std::pair<cv::Mat, cv::Mat>>& boardTF) {
     boardTF.resize(TF.size());
     if (TF.size() == 1) {
         boardTF = TF;
@@ -100,12 +173,118 @@ void TransformTool::boardTransform(const std::vector<std::pair<cv::Mat, cv::Mat>
     cv::Mat tv = (cv::Mat_<double>(3, 1) << 0.0, 0.0, 0.0);
     boardTF[0] = std::make_pair(r, tv);
     for (int i = 1; i < TF.size(); i++) {
-        cv::Mat R,T;
+        cv::Mat R, T;
         if (TF[i].first.empty() && TF[i].second.empty()) {
             continue;
         }
-        R = r1.t() * TF[i].first;//相对旋转矩阵
-        T = r1.t() * (TF[i].second - t1);//相对平移矩阵
+        R = r1.t() * TF[i].first; //相对旋转矩阵
+        T = r1.t() * (TF[i].second - t1); //相对平移矩阵
         boardTF[i] = std::make_pair(R, T);
     }
+}
+
+void TransformTool::tfAverage(const std::vector<std::pair<cv::Mat, cv::Mat>>& allTF,
+                              std::pair<cv::Mat, cv::Mat>& avTF) {
+    std::vector<cv::Vec4f> q;
+    std::vector<cv::Mat> t;
+    cv::Mat R,T;
+    for (const auto& p : allTF) {
+        cv::Mat r = p.first, tv = p.second;
+        if (r.empty() || tv.empty()) {
+            continue;
+        }
+        q.push_back(rotationMatrixToQuaternion(r));
+        t.push_back(tv);
+    }
+    unifyQuaternionSigns(q);
+    //使用四元数平均R
+    {
+        cv::Vec4f sum(0, 0, 0, 0); // 初始化四元数和为零
+        for (const auto& quaternion : q) {
+            sum += quaternion;
+        } // 累加所有四元数
+        sum /= static_cast<float>(q.size()); // 计算平均值
+        cv::Vec4f Q = sum / cv::norm(sum); // 归一化平均四元数并返回
+        R = quaternionToRotationMatrix(Q);
+    }
+    //使用算术平均计算T
+    {
+        cv::Vec3f sum(0, 0, 0);
+        for (const auto& tv : t) {
+            sum += cv::Vec3f(tv.at<double>(0), tv.at<double>(1), tv.at<double>(2));
+        }
+        const int n = t.size();
+        cv::Vec3f result = sum / n;
+        T = (cv::Mat_<double>(3, 1) << result[0], result[1], result[2]);
+    }
+    avTF = std::make_pair(R, T);
+}
+
+cv::Vec4f TransformTool::rotationMatrixToQuaternion(const cv::Mat& R) {
+    // 确保输入矩阵是3x3的单通道浮点矩阵
+    CV_Assert(R.rows == 3 && R.cols == 3 && R.type() == CV_32F);
+
+    // 提取旋转矩阵的元素
+    float m00 = R.at<float>(0, 0), m01 = R.at<float>(0, 1), m02 = R.at<float>(0, 2);
+    float m10 = R.at<float>(1, 0), m11 = R.at<float>(1, 1), m12 = R.at<float>(1, 2);
+    float m20 = R.at<float>(2, 0), m21 = R.at<float>(2, 1), m22 = R.at<float>(2, 2);
+
+    // 计算矩阵的迹（对角线元素之和）
+    float tr = m00 + m11 + m22;
+    float qw, qx, qy, qz; // 四元数的四个分量
+
+    // 根据迹的值选择不同的计算方法
+    if (tr > 0) {
+        // 迹为正时的计算公式
+        float S = sqrt(tr + 1.0f) * 2;
+        qw = 0.25f * S;
+        qx = (m21 - m12) / S;
+        qy = (m02 - m20) / S;
+        qz = (m10 - m01) / S;
+    } else if (m00 > m11 && m00 > m22) {
+        // m00最大时的计算公式
+        float S = sqrt(1.0f + m00 - m11 - m22) * 2;
+        qw = (m21 - m12) / S;
+        qx = 0.25f * S;
+        qy = (m01 + m10) / S;
+        qz = (m02 + m20) / S;
+    } else if (m11 > m22) {
+        // m11最大时的计算公式
+        float S = sqrt(1.0f + m11 - m00 - m22) * 2;
+        qw = (m02 - m20) / S;
+        qx = (m01 + m10) / S;
+        qy = 0.25f * S;
+        qz = (m12 + m21) / S;
+    } else {
+        // m22最大时的计算公式
+        float S = sqrt(1.0f + m22 - m00 - m11) * 2;
+        qw = (m10 - m01) / S;
+        qx = (m02 + m20) / S;
+        qy = (m12 + m21) / S;
+        qz = 0.25f * S;
+    }
+
+    // 返回四元数（qw, qx, qy, qz）
+    return cv::Vec4f(qw, qx, qy, qz);
+}
+
+// 统一四元数的符号
+void unifyQuaternionSigns(std::vector<cv::Vec4f>& quaternions) {
+    if (quaternions.empty()) return;
+    cv::Vec4f base = quaternions[0];
+    for (auto& q : quaternions) {
+        if (base.dot(q) < 0) q *= -1;
+    }
+}
+
+// 将四元数转换为旋转矩阵
+cv::Mat TransformTool::quaternionToRotationMatrix(const cv::Vec4f& q) {
+    float w = q[0], x = q[1], y = q[2], z = q[3]; // 提取四元数的分量
+    float xx = x * x, xy = x * y, xz = x * z, xw = x * w;
+    float yy = y * y, yz = y * z, yw = y * w;
+    float zz = z * z, zw = z * w;
+
+    // 根据四元数的公式构造旋转矩阵
+    return (cv::Mat_<float>(3, 3) << 1 - 2 * yy - 2 * zz, 2 * xy - 2 * zw, 2 * xz + 2 * yw, 2 * xy + 2 * zw, 1 - 2 * xx
+        - 2 * zz, 2 * yz - 2 * xw, 2 * xz - 2 * yw, 2 * yz + 2 * xw, 1 - 2 * xx - 2 * yy);
 }
