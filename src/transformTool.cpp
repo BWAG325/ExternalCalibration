@@ -36,7 +36,7 @@ bool TransformTool::getBoardTF(const Corners& corners, const std::vector<Chessbo
 
 bool TransformTool::tfADD(std::pair<cv::Mat, cv::Mat>& transform, std::vector<std::pair<cv::Mat, cv::Mat>>& maskTF,
                           int main, int rest) {
-    if (main >= maskTF.size()) {
+    if (main >= static_cast<int>(maskTF.size())) {
         std::cout << "main out of range" << std::endl;
         return false;
     }
@@ -45,7 +45,7 @@ bool TransformTool::tfADD(std::pair<cv::Mat, cv::Mat>& transform, std::vector<st
         return false;
     }
     if (main == 0) {
-        if (rest > maskTF.size()) {
+        if (rest > static_cast<int>(maskTF.size())) {
             maskTF.push_back(transform);
         } else {
             if (maskTF[rest].first.empty() || maskTF[rest].second.empty()) {
@@ -63,7 +63,7 @@ bool TransformTool::tfADD(std::pair<cv::Mat, cv::Mat>& transform, std::vector<st
         cv::Mat R, T;
         R = mainR.t() * restR;
         T = mainT.t() * (restT - mainT);
-        if (rest > maskTF.size()) {
+        if (rest > static_cast<int>(maskTF.size())) {
             maskTF.emplace_back(R, T);
         } else {
             if (maskTF[rest].first.empty() || maskTF[rest].second.empty()) {
@@ -82,7 +82,7 @@ bool TransformTool::tfADD(std::pair<cv::Mat, cv::Mat>& transform, std::vector<st
 //坐标关系都是相对板1保存，是网状的坐标关系,获得从rest到main的转化关系
 bool TransformTool::lookupTransform(const std::vector<std::pair<cv::Mat, cv::Mat>>& maskTF, int main, int rest,
                                     std::pair<cv::Mat, cv::Mat>& transform) {
-    if (main >= maskTF.size() || rest >= maskTF.size()) {
+    if (main >= static_cast<int>(maskTF.size()) || rest >= static_cast<int>(maskTF.size())) {
         std::cout << "main or rest out of range" << std::endl;
         return false;
     }
@@ -100,7 +100,10 @@ bool TransformTool::lookupTransform(const std::vector<std::pair<cv::Mat, cv::Mat
     cv::Mat restT = maskTF[rest].second;
     cv::Mat R, T;
     R = mainR.t() * restR;
-    T = mainT.t() * (restT - mainT);
+    T = mainT.t()*(restT - mainT);
+    if (cv::norm(T) == 0) {
+        T = cv::Mat::zeros(3, 1, mainT.type());
+    }
 
     transform = std::pair<cv::Mat, cv::Mat>(R, T);
     return true;
@@ -110,7 +113,7 @@ bool TransformTool::lookupTransform(const std::vector<std::pair<cv::Mat, cv::Mat
 //对单张图片棋盘上的点进行分类
 bool TransformTool::boardClassify(const Corners& corners, const std::vector<Chessboard>& boards,
                                   const std::vector<cv::Mat>& chessboards,
-                                  std::vector<std::vector<cv::Point2f>> points) {
+                                  std::vector<std::vector<cv::Point2f>>& points) {
     if (chessboards.empty()) {
         std::cerr << "chessboards is empty" << std::endl;
         return false;
@@ -144,7 +147,7 @@ bool TransformTool::pnpCalculate(const std::vector<Chessboard>& boards, const Ca
         return false;
     }
     TF.resize(boards.size());
-    for (int i = 0; i < boards.size(); i++) {
+    for (int i = 0; i < static_cast<int>(boards.size()); i++) {
         cv::Mat rv, tv, r;
         const auto& board = boards[i];
         const auto& point = points[i];
@@ -172,7 +175,7 @@ void TransformTool::boardTransform(const std::vector<std::pair<cv::Mat, cv::Mat>
     cv::Mat r = cv::Mat::eye(3, 3, CV_64F);
     cv::Mat tv = (cv::Mat_<double>(3, 1) << 0.0, 0.0, 0.0);
     boardTF[0] = std::make_pair(r, tv);
-    for (int i = 1; i < TF.size(); i++) {
+    for (int i = 1; i < static_cast<int>(TF.size()); i++) {
         cv::Mat R, T;
         if (TF[i].first.empty() && TF[i].second.empty()) {
             continue;
@@ -211,9 +214,9 @@ void TransformTool::tfAverage(const std::vector<std::pair<cv::Mat, cv::Mat>>& al
     {
         cv::Vec3f sum(0, 0, 0);
         for (const auto& tv : t) {
-            sum += cv::Vec3f(tv.at<double>(0), tv.at<double>(1), tv.at<double>(2));
+            sum += cv::Vec3f(tv.at<float>(0), tv.at<float>(1), tv.at<float>(2));
         }
-        const int n = t.size();
+        const int n = static_cast<int>(t.size());
         cv::Vec3f result = sum / n;
         T = (cv::Mat_<double>(3, 1) << result[0], result[1], result[2]);
     }
@@ -265,11 +268,11 @@ cv::Vec4f TransformTool::rotationMatrixToQuaternion(const cv::Mat& R) {
     }
 
     // 返回四元数（qw, qx, qy, qz）
-    return cv::Vec4f(qw, qx, qy, qz);
+    return {qw, qx, qy, qz};
 }
 
 // 统一四元数的符号
-void unifyQuaternionSigns(std::vector<cv::Vec4f>& quaternions) {
+void TransformTool::unifyQuaternionSigns(std::vector<cv::Vec4f>& quaternions) {
     if (quaternions.empty()) return;
     cv::Vec4f base = quaternions[0];
     for (auto& q : quaternions) {

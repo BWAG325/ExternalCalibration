@@ -26,9 +26,9 @@ cameras:
 
 boards:
   - id: 0
-    X: 9
-    Y: 6
-    square_size: 0.025
+    X: 11
+    Y: 7
+    square_size: 0.015
   - id: 1
     X: 8
     Y: 5

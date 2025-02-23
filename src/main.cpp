@@ -5,6 +5,7 @@
 #include <opencv2/opencv.hpp>
 #include <vector>
 #include <iostream>
+#include <transformTool.h>
 
 #include "CornerDetAC.h"
 #include "ChessboradStruct.h"
@@ -14,7 +15,7 @@ ChessboardStruct chessboardStruct;
 std::string yamlPath = "../data/params.yaml";
 
 //读取参数
-void loadParams(std::vector<CameraParams>& cameraParams , std::vector<Chessboard>& boards ) {
+void loadParams(std::vector<CameraParams>& cameraParams, std::vector<Chessboard>& boards) {
     std::cout << "Loading ..." << std::endl;
     cv::FileStorage fs(yamlPath, cv::FileStorage::READ);
     if (!fs.isOpened()) {
@@ -34,6 +35,7 @@ void loadParams(std::vector<CameraParams>& cameraParams , std::vector<Chessboard
         cameraParams.push_back(cam);
     }
 }
+
 //读取图片
 cv::Mat getImage(cv::Mat& src) {
     std::string img_path = "../img/5.png";
@@ -56,8 +58,9 @@ cv::Mat getImage(cv::Mat& src) {
 
     return gray;
 }
+
 //检测棋盘格
-void getData(cv::Mat& gray, Corners& corners, std::vector<cv::Mat>& chessboards) {
+void findBoard(cv::Mat& gray, Corners& corners, std::vector<cv::Mat>& chessboards) {
     //START
     auto timeCount = static_cast<double>(cv::getTickCount());
     cornerDetector.detectCorners(gray, corners, 0.01);
@@ -67,27 +70,38 @@ void getData(cv::Mat& gray, Corners& corners, std::vector<cv::Mat>& chessboards)
     //END
 }
 
+void singleImg(cv::Mat& gray,const std::vector<Chessboard>& boards,const CameraParams& cameraParam,
+          std::vector<std::pair<cv::Mat, cv::Mat>>& tf) {
+    std::vector<cv::Mat> chessboards;
+    Corners corners;
+    findBoard(gray, corners, chessboards);
+    TransformTool::getBoardTF(corners,boards,chessboards,cameraParam,tf);
+};
+
 int main() {
     //加载相关相机内参以及标定版参数
     std::vector<Chessboard> boards;
     std::vector<CameraParams> cameraParams;
-    loadParams(cameraParams,boards);
-
-    std::vector<std::vector<cv::Point2f>> imgPoints;
+    loadParams(cameraParams, boards);
 
     cv::Mat src;
     cv::Mat gray = getImage(src);
 
-    std::vector<cv::Mat> chessboards;
-    Corners corners;
 
-    getData(gray, corners, chessboards);
+    std::vector<std::pair<cv::Mat, cv::Mat>> boradsTF;
+    singleImg(gray,boards,cameraParams[0],boradsTF);
+    std::cout << boards.size() << std::endl;
+
+    std::pair<cv::Mat, cv::Mat> a;
+    TransformTool::lookupTransform(boradsTF,0,0,a);
+    std::cout << a.first << std::endl;
+    std::cout << a.second << std::endl;
 
     // cv::Mat rvec, tvec;  // 旋转向量和平移向量
     // cv::solvePnP(objectPoints, imgPoints, K, D, rvec, tvec);
 
 
-    chessboardStruct.drawChessboard(src, corners, chessboards, "board");
+    // chessboardStruct.drawChessboard(src, corners, chessboards, "board");
 
     return 0;
 }
