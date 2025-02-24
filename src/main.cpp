@@ -22,25 +22,25 @@ void loadParams(std::vector<CameraParams>& cameraParams, std::vector<Chessboard>
         std::cerr << "Error opening file " << yamlPath << std::endl;
     }
     cv::FileNode boardNode = fs["boards"];
-    for (cv::FileNodeIterator it = boardNode.begin(); it != boardNode.end(); ++it) {
-        Chessboard board((*it)["id"], std::pair<int, int>((*it)["X"], (*it)["Y"]), (*it)["square_size"]);
+    for (auto&& it : boardNode) {
+        Chessboard board(it["id"], std::pair<int, int>(it["X"], it["Y"]), it["square_size"]);
         boards.push_back(board);
     }
     cv::FileNode cameraNode = fs["cameras"];
-    for (cv::FileNodeIterator it = cameraNode.begin(); it != cameraNode.end(); ++it) {
+    for (auto&& it : cameraNode) {
         CameraParams cam;
-        (*it)["id"] >> cam.id;
-        (*it)["K"] >> cam.K;
-        (*it)["D"] >> cam.D;
+        it["id"] >> cam.id;
+        it["K"] >> cam.K;
+        it["D"] >> cam.D;
         cameraParams.push_back(cam);
     }
 }
 
 //读取图片
-cv::Mat getImage(cv::Mat& src) {
-    std::string img_path = "../img/5.png";
+cv::Mat getImage(const std::string& name, const std::string& type) {
+    std::string img_path = "../img/" + name + "." + type;
     std::cout << "reading img" << img_path << std::endl;
-    src = cv::imread(img_path, cv::IMREAD_UNCHANGED);
+    cv::Mat src = cv::imread(img_path, cv::IMREAD_UNCHANGED);
     if (src.empty()) std::cout << "empty image" << std::endl;
     //转化成灰度图
     cv::Mat gray;
@@ -70,13 +70,35 @@ void findBoard(cv::Mat& gray, Corners& corners, std::vector<cv::Mat>& chessboard
     //END
 }
 
-void singleImg(cv::Mat& gray,const std::vector<Chessboard>& boards,const CameraParams& cameraParam,
-          std::vector<std::pair<cv::Mat, cv::Mat>>& tf) {
+void singleBoardImg(cv::Mat& gray, const std::vector<Chessboard>& boards, const CameraParams& cameraParam,
+                    std::vector<std::pair<cv::Mat, cv::Mat>>& tf) {
     std::vector<cv::Mat> chessboards;
     Corners corners;
     findBoard(gray, corners, chessboards);
-    TransformTool::getBoardTF(corners,boards,chessboards,cameraParam,tf);
+    // chessboardStruct.drawChessboard(gray, corners, chessboards, "board");
+    TransformTool::getBoardTF(corners, boards, chessboards, cameraParam, tf);
 };
+
+void getBoardTF(const std::string& name, const int num, const std::string& type, const std::vector<Chessboard>& boards,
+                const CameraParams& cameraParam, std::vector<std::pair<cv::Mat, cv::Mat>>& tf) {
+    std::vector<std::vector<std::pair<cv::Mat, cv::Mat>>> TFs;
+    TFs.resize(boards.size());
+    for (int i = 0; i < num; i++) {
+        std::vector<std::pair<cv::Mat, cv::Mat>> boardTF;
+        std::string n = name + "" + std::to_string(i);
+        cv::Mat gray = getImage(n, type);
+        singleBoardImg(gray, boards, cameraParam, boardTF);
+        for (int j = 0; j < boardTF.size(); j++) {
+            TFs[j].push_back(boardTF[j]);
+        }
+    }
+    for (auto it : TFs) {
+        std::pair<cv::Mat, cv::Mat> avTF;
+        //TODO 计算有问题
+        TransformTool::tfAverage(it,avTF);
+        tf.push_back(avTF);
+    }
+}
 
 int main() {
     //加载相关相机内参以及标定版参数
@@ -84,16 +106,15 @@ int main() {
     std::vector<CameraParams> cameraParams;
     loadParams(cameraParams, boards);
 
-    cv::Mat src;
-    cv::Mat gray = getImage(src);
-
-
     std::vector<std::pair<cv::Mat, cv::Mat>> boradsTF;
-    singleImg(gray,boards,cameraParams[0],boradsTF);
-    std::cout << boards.size() << std::endl;
-
+    getBoardTF("t",2,"png",boards,cameraParams[0],boradsTF);
+    for (auto it : boradsTF) {
+        std::cout << "RT" << std::endl;
+        std::cout << it.first << std::endl;
+        std::cout << it.second << std::endl;
+    }
     std::pair<cv::Mat, cv::Mat> a;
-    TransformTool::lookupTransform(boradsTF,0,0,a);
+    TransformTool::lookupTransform(boradsTF, 0, 2, a);
     std::cout << a.first << std::endl;
     std::cout << a.second << std::endl;
 

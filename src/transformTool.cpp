@@ -99,8 +99,13 @@ bool TransformTool::lookupTransform(const std::vector<std::pair<cv::Mat, cv::Mat
     cv::Mat restR = maskTF[rest].first;
     cv::Mat restT = maskTF[rest].second;
     cv::Mat R, T;
+    std::cout << mainR << std::endl;
+    std::cout << mainT << std::endl;
+    std::cout << restR << std::endl;
+    std::cout << restT << std::endl;
     R = mainR.t() * restR;
-    T = mainT.t()*(restT - mainT);
+    // cv::Mat b = restT - mainT;
+    T = mainR.t() * (restT - mainT);
     if (cv::norm(T) == 0) {
         T = cv::Mat::zeros(3, 1, mainT.type());
     }
@@ -127,9 +132,37 @@ bool TransformTool::boardClassify(const Corners& corners, const std::vector<Ches
             int bx = board.size.first, by = board.size.second;
             if ((ccol == bx || ccol == by) && ccol * crow == bx * by) {
                 //遍历改棋盘的每一个点,重新储存
-                for (int i = 0; i < chessboard.rows; i++) {
-                    for (int j = 0; j < chessboard.cols; j++) {
-                        points[board.id].push_back(corners.p[chessboard.at<int>(i, j)]);
+                int top = chessboard.at<int>(0, 0);
+                int bottom = chessboard.at<int>(crow - 1, ccol - 1);
+                cv::Point2f tp = corners.p[top];
+                cv::Point2f bp = corners.p[bottom];
+                if (ccol == bx) {
+                    if (tp.y < bp.y) {
+                        for (int i = 0; i < crow; i++) {
+                            for (int j = 0; j < ccol; j++) {
+                                points[board.id].push_back(corners.p[chessboard.at<int>(i, j)]);
+                            }
+                        }
+                    }else {
+                        for (int i = 0; i < crow; i++) {
+                            for (int j = 0; j < ccol; j++) {
+                                points[board.id].push_back(corners.p[chessboard.at<int>(crow-i-1, ccol-j-1)]);
+                            }
+                        }
+                    }
+                }else {
+                    if (tp.y < bp.y) {
+                        for (int i = 0; i < ccol; i++) {
+                            for (int j = 0; j < crow; j++) {
+                                points[board.id].push_back(corners.p[chessboard.at<int>(j, i)]);
+                            }
+                        }
+                    }else {
+                        for (int i = 0; i < ccol; i++) {
+                            for (int j = 0; j < crow; j++) {
+                                points[board.id].push_back(corners.p[chessboard.at<int>(crow - j - 1, ccol-1-i)]);
+                            }
+                        }
                     }
                 }
             }
@@ -166,9 +199,17 @@ bool TransformTool::pnpCalculate(const std::vector<Chessboard>& boards, const Ca
 
 void TransformTool::boardTransform(const std::vector<std::pair<cv::Mat, cv::Mat>>& TF,
                                    std::vector<std::pair<cv::Mat, cv::Mat>>& boardTF) {
+    if (TF.empty()) {
+        std::cerr << "TF is empty" << std::endl;
+        return;
+    }
     boardTF.resize(TF.size());
     if (TF.size() == 1) {
         boardTF = TF;
+        return;
+    }
+    if (TF[0].first.empty() || TF[0].second.empty()) {
+        std::cerr << "TF[0] is empty" << std::endl;
         return;
     }
     cv::Mat r1 = TF[0].first, t1 = TF[0].second;
@@ -177,7 +218,7 @@ void TransformTool::boardTransform(const std::vector<std::pair<cv::Mat, cv::Mat>
     boardTF[0] = std::make_pair(r, tv);
     for (int i = 1; i < static_cast<int>(TF.size()); i++) {
         cv::Mat R, T;
-        if (TF[i].first.empty() && TF[i].second.empty()) {
+        if (TF[i].first.empty() || TF[i].second.empty()) {
             continue;
         }
         R = r1.t() * TF[i].first; //相对旋转矩阵
@@ -190,7 +231,7 @@ void TransformTool::tfAverage(const std::vector<std::pair<cv::Mat, cv::Mat>>& al
                               std::pair<cv::Mat, cv::Mat>& avTF) {
     std::vector<cv::Vec4f> q;
     std::vector<cv::Mat> t;
-    cv::Mat R,T;
+    cv::Mat R, T;
     for (const auto& p : allTF) {
         cv::Mat r = p.first, tv = p.second;
         if (r.empty() || tv.empty()) {
@@ -198,6 +239,10 @@ void TransformTool::tfAverage(const std::vector<std::pair<cv::Mat, cv::Mat>>& al
         }
         q.push_back(rotationMatrixToQuaternion(r));
         t.push_back(tv);
+    }
+    if (q.empty()||t.empty()) {
+        std::cout << "q or t is empty" << std::endl;
+        return;
     }
     unifyQuaternionSigns(q);
     //使用四元数平均R
@@ -225,7 +270,7 @@ void TransformTool::tfAverage(const std::vector<std::pair<cv::Mat, cv::Mat>>& al
 
 cv::Vec4f TransformTool::rotationMatrixToQuaternion(const cv::Mat& R) {
     // 确保输入矩阵是3x3的单通道浮点矩阵
-    CV_Assert(R.rows == 3 && R.cols == 3 && R.type() == CV_32F);
+    // CV_Assert(R.rows == 3 && R.cols == 3 && R.type() == CV_32F);
 
     // 提取旋转矩阵的元素
     float m00 = R.at<float>(0, 0), m01 = R.at<float>(0, 1), m02 = R.at<float>(0, 2);
