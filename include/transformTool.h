@@ -15,8 +15,7 @@
 class TransformTool {
     //单张图片现检测到的棋盘格按照行列进行分类，储存到points中
     static bool boardClassify(const Corners& corners, const std::vector<Chessboard>& boards,
-                                     const std::vector<cv::Mat>& chessboards,
-                                     std::vector<std::vector<cv::Point2f>>& points);
+                              const std::vector<cv::Mat>& chessboards, std::vector<std::vector<cv::Point2f>>& points);
     //对该图片上的棋盘格进行pnp，储存到TF中
     static bool pnpCalculate(const std::vector<Chessboard>& boards, const CameraParams& cameraParam,
                              const std::vector<std::vector<cv::Point2f>>& points,
@@ -40,13 +39,13 @@ public:
 
     //查找列表中从rest到main的变化关系
     static bool lookupTransform(const std::vector<std::pair<cv::Mat, cv::Mat>>& maskTF, int main, int rest,
-                                       std::pair<cv::Mat, cv::Mat>& transform);
+                                std::pair<cv::Mat, cv::Mat>& transform);
     //在已经建立了主板后，后期添加其他的板的处理函数 TODO：待测
     static bool tfADD(std::pair<cv::Mat, cv::Mat>& transform, std::vector<std::pair<cv::Mat, cv::Mat>>& maskTF,
-                             int main, int rest);
+                      int main, int rest);
 
     //对旋转矩阵转化成4元数，使用opencv平均后，再转换回来，平移矩阵直接算术平均 TODO：待测
-    static  void tfAverage(const std::vector<std::pair<cv::Mat, cv::Mat>>& allTF, std::pair<cv::Mat, cv::Mat>& avTF);
+    static void tfAverage(const std::vector<std::pair<cv::Mat, cv::Mat>>& allTF, std::pair<cv::Mat, cv::Mat>& avTF);
 
     //对传入的单张图片的棋盘进行处理，得到每个棋盘对该相机的 R T
     static bool getTF(const Corners& corners, const std::vector<Chessboard>& boards,

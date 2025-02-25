@@ -10,6 +10,14 @@
 #include "CornerDetAC.h"
 #include "ChessboradStruct.h"
 
+void showTF(std::vector<std::pair<cv::Mat, cv::Mat>> boradsTF) {
+    for (auto it : boradsTF) {
+        std::cout << "RT" << std::endl;
+        std::cout << it.first << std::endl;
+        std::cout << it.second << std::endl;
+    }
+}
+
 CornerDetAC cornerDetector;
 ChessboardStruct chessboardStruct;
 std::string yamlPath = "../data/params.yaml";
@@ -69,14 +77,83 @@ void findBoard(cv::Mat& gray, Corners& corners, std::vector<cv::Mat>& chessboard
     std::cout << "time cost :" << timeCount << std::endl;
     //END
 }
+//NOTE remove
+bool boardClassify(const Corners& corners, const std::vector<Chessboard>& boards,
+                                  const std::vector<cv::Mat>& chessboards,
+                                  std::vector<std::vector<cv::Point2f>>& points) {
+    if (chessboards.empty()) {
+        std::cerr << "chessboards is empty" << std::endl;
+        return false;
+    }
+    points.resize(boards.size());
+    //遍历所有的棋盘
+    for (auto chessboard : chessboards) {
+        //对该棋盘进行判断
+        for (const auto& board : boards) {
+            int ccol = chessboard.cols, crow = chessboard.rows;
+            int bx = board.size.first, by = board.size.second;
+            if ((ccol == bx || ccol == by) && ccol * crow == bx * by) {
+                //遍历改棋盘的每一个点,重新储存
+                int top = chessboard.at<int>(0, 0);
+                int bottom = chessboard.at<int>(crow - 1, ccol - 1);
+                cv::Point2f tp = corners.p[top];
+                cv::Point2f bp = corners.p[bottom];
+                if (ccol == bx) {
+                    if (tp.y < bp.y) {
+                        for (int i = 0; i < crow; i++) {
+                            for (int j = 0; j < ccol; j++) {
+                                points[board.id].push_back(corners.p[chessboard.at<int>(i, j)]);
+                            }
+                        }
+                    } else {
+                        for (int i = 0; i < crow; i++) {
+                            for (int j = 0; j < ccol; j++) {
+                                points[board.id].push_back(corners.p[chessboard.at<int>(crow - i - 1, ccol - j - 1)]);
+                            }
+                        }
+                    }
+                } else {
+                    if (tp.y < bp.y) {
+                        for (int i = 0; i < ccol; i++) {
+                            for (int j = 0; j < crow; j++) {
+                                points[board.id].push_back(corners.p[chessboard.at<int>(j, i)]);
+                            }
+                        }
+                    } else {
+                        for (int i = 0; i < ccol; i++) {
+                            for (int j = 0; j < crow; j++) {
+                                points[board.id].push_back(corners.p[chessboard.at<int>(crow - j - 1, ccol - 1 - i)]);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return true;
+}
 
 void singleBoardImg(cv::Mat& gray, const std::vector<Chessboard>& boards, const CameraParams& cameraParam,
                     std::vector<std::pair<cv::Mat, cv::Mat>>& tf) {
     std::vector<cv::Mat> chessboards;
     Corners corners;
     findBoard(gray, corners, chessboards);
-    // chessboardStruct.drawChessboard(gray, corners, chessboards, "board");
-    TransformTool::getBoardTF(corners, boards, chessboards, cameraParam, tf);
+    chessboardStruct.drawChessboard(gray, corners, chessboards, "board");
+
+    //NOTE remove
+    std::vector<std::vector<cv::Point2f>> points;
+    boardClassify(corners,boards,chessboards,points);
+    for (int i = 0; i < points.size(); i++) {
+        cv::drawChessboardCorners(gray, cv::Size(boards[i].size.first,boards[i].size.second), points[i], true);
+    }
+
+    TransformTool::getTF(corners, boards, chessboards, cameraParam, tf);
+    //show NOTE remove
+    for (auto&& it : tf) {
+        cv::drawFrameAxes(gray,cameraParam.K,cameraParam.D,it.first,it.second,0.5);
+        cv::imshow("b", gray);
+        cv::waitKey(0);
+    }
 };
 
 void getBoardTF(const std::string& name, const int num, const std::string& type, const std::vector<Chessboard>& boards,
@@ -91,14 +168,19 @@ void getBoardTF(const std::string& name, const int num, const std::string& type,
         for (int j = 0; j < boardTF.size(); j++) {
             TFs[j].push_back(boardTF[j]);
         }
+        tf = boardTF;
     }
-    for (auto it : TFs) {
-        std::pair<cv::Mat, cv::Mat> avTF;
-        //TODO 计算有问题
-        TransformTool::tfAverage(it,avTF);
-        tf.push_back(avTF);
-    }
+    // for (auto it : TFs) {
+    //     std::pair<cv::Mat, cv::Mat> avTF;
+    //     //TODO 计算有问题
+    //     TransformTool::tfAverage(it,avTF);
+    //     tf.push_back(avTF);
+    // }
+    // showTF(tf);
+    // std::cout<<"show board"<<std::endl;
 }
+
+
 
 int main() {
     //加载相关相机内参以及标定版参数
@@ -107,14 +189,11 @@ int main() {
     loadParams(cameraParams, boards);
 
     std::vector<std::pair<cv::Mat, cv::Mat>> boradsTF;
-    getBoardTF("t",2,"png",boards,cameraParams[0],boradsTF);
-    for (auto it : boradsTF) {
-        std::cout << "RT" << std::endl;
-        std::cout << it.first << std::endl;
-        std::cout << it.second << std::endl;
-    }
+    getBoardTF("t",1,"png",boards,cameraParams[0],boradsTF);
+
     std::pair<cv::Mat, cv::Mat> a;
     TransformTool::lookupTransform(boradsTF, 0, 2, a);
+    std::cout<<"a"<<std::endl;
     std::cout << a.first << std::endl;
     std::cout << a.second << std::endl;
 
