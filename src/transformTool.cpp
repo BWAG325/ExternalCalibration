@@ -124,41 +124,42 @@ bool TransformTool::boardClassify(const Corners& corners, const std::vector<Ches
     for (auto chessboard : chessboards) {
         //对该棋盘进行判断
         for (const auto& board : boards) {
-            int ccol = chessboard.cols, crow = chessboard.rows;
+            int crow = chessboard.rows, ccol = chessboard.cols;
             int bx = board.size.first, by = board.size.second;
             if ((ccol == bx || ccol == by) && ccol * crow == bx * by) {
-                //遍历改棋盘的每一个点,重新储存
-                int top = chessboard.at<int>(0, 0);
-                int bottom = chessboard.at<int>(crow - 1, ccol - 1);
-                cv::Point2f tp = corners.p[top];
-                cv::Point2f bp = corners.p[bottom];
-                if (ccol == bx) {
-                    if (tp.y < bp.y) {
-                        for (int i = 0; i < crow; i++) {
-                            for (int j = 0; j < ccol; j++) {
-                                points[board.id].push_back(corners.p[chessboard.at<int>(i, j)]);
-                            }
-                        }
-                    } else {
-                        for (int i = 0; i < crow; i++) {
-                            for (int j = 0; j < ccol; j++) {
-                                points[board.id].push_back(corners.p[chessboard.at<int>(crow - i - 1, ccol - j - 1)]);
-                            }
-                        }
-                    }
+                cv::Mat rcb;
+                if (ccol == by) {
+                    cv::rotate(chessboard, rcb, cv::ROTATE_90_COUNTERCLOCKWISE);
                 } else {
-                    if (tp.y < bp.y) {
-                        for (int i = 0; i < ccol; i++) {
-                            for (int j = 0; j < crow; j++) {
-                                points[board.id].push_back(corners.p[chessboard.at<int>(j, i)]);
-                            }
-                        }
-                    } else {
-                        for (int i = 0; i < ccol; i++) {
-                            for (int j = 0; j < crow; j++) {
-                                points[board.id].push_back(corners.p[chessboard.at<int>(crow - j - 1, ccol - 1 - i)]);
-                            }
-                        }
+                    rcb = chessboard;
+                }
+                cv::Point2f left_top_point = corners.p[rcb.at<int>(0, 0)];
+                cv::Point2f right_top_point = corners.p[rcb.at<int>(0, ccol - 1)];
+                cv::Point2f left_bottom_point = corners.p[rcb.at<int>(crow - 1, 0)];
+                cv::Point2f right_bottom_point = corners.p[rcb.at<int>(crow - 1, ccol - 1)];
+
+                std::vector<cv::Point2f> bps{left_top_point, right_top_point, right_bottom_point, left_bottom_point};
+                std::sort(bps.begin(), bps.end(), [](const cv::Point2f& a, const cv::Point2f& b) {
+                    return (a.y + a.x) < (b.y + b.x);
+                });
+
+                std::cout << bps[0] << std::endl;
+
+                //判断识别的角度
+                if (bps[0]==right_bottom_point) {
+                    cv::rotate(rcb, rcb, cv::ROTATE_180);
+                }
+                if (bps[0]==left_bottom_point) {
+                    //垂直翻转
+                    cv::flip(rcb, rcb, 0);
+                }
+                if (bps[0]==right_top_point) {
+                    //左右翻转
+                    cv::flip(rcb, rcb, 1);
+                }
+                for (int i = 0; i < rcb.cols; i++) {
+                    for (int j = 0; j < rcb.rows; j++) {
+                        points[board.id].emplace_back(corners.p[rcb.at<int>(j, i)]);
                     }
                 }
             }
@@ -209,8 +210,16 @@ bool TransformTool::pnpCalculate(const std::vector<Chessboard>& boards, const Ca
         //     // 使用初始解进一步优化
         //     cv::solvePnPRefineLM(inlierObjectPoints, inlierImagePoints, cameraParam.K, cameraParam.D, rv, tv);
         // }
-
         cv::Rodrigues(rv, r);
+        if (r.at<double>(2, 2) < 0) {
+            // 交换x和y轴
+            cv::Mat temp;
+            r.col(0).copyTo(temp);
+            r.col(1).copyTo(r.col(0));
+            temp.copyTo(r.col(1));
+            // z轴取负
+            r.col(2) = -r.col(2);
+        }
         TF[i] = std::make_pair(r, tv);
     }
     return true;
@@ -256,9 +265,10 @@ void TransformTool::tfAverage(const std::vector<std::pair<cv::Mat, cv::Mat>>& al
         if (r.empty() || tv.empty()) {
             continue;
         }
-        std::cout << "data" << std::endl;
-        std::cout << r << std::endl;
-        std::cout << tv << std::endl;
+
+        // std::cout << "data" << std::endl;
+        // std::cout << r << std::endl;
+        // std::cout << tv << std::endl;
 
         q.emplace_back(cv::Quatd::createFromRotMat(r));
         t.push_back(tv);
